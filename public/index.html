@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>WORM LIVE BETA</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07110c;color:white;font:14px Arial}
+canvas{display:block;width:100vw;height:100vh}
+#join{position:fixed;inset:0;background:#07110cee;display:grid;place-items:center;z-index:5}
+.panel{width:min(90vw,360px);background:#13231a;border:1px solid #31553b;border-radius:18px;padding:22px;box-shadow:0 15px 60px #0008}
+h1{margin:0 0 8px;color:#8cff72}input,button{width:100%;padding:13px;border-radius:10px;border:0;margin-top:10px;font-size:16px}
+button{background:#60dc52;font-weight:bold;color:#10200d}
+#hud{position:fixed;top:12px;left:12px;pointer-events:none;background:#0009;padding:10px 13px;border-radius:12px}
+#rank{position:fixed;right:12px;top:12px;background:#0009;padding:10px;border-radius:12px;width:160px;font-size:12px}
+#msg{position:fixed;left:50%;top:18%;transform:translateX(-50%);background:#000b;padding:10px 15px;border-radius:20px;opacity:0;transition:.2s}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="join"><div class="panel"><h1>🐍 WORM LIVE</h1><div>Entre na arena compartilhada. Sua câmera acompanha sua cobra.</div><input id="name" maxlength="22" placeholder="Seu nome ou @TikTok"><button id="go">ENTRAR NO JOGO</button><small style="display:block;margin-top:12px;color:#b8c9bb">Beta externa — ainda não conectada aos eventos reais do TikTok.</small></div></div>
+<div id="hud">🐍 <b id="me">@Visitante</b><br>Comprimento: <b id="len">20</b></div><div id="rank">🏆 TOP 10<div id="r"></div></div><div id="msg"></div>
+<script src="/socket.io/socket.io.js"></script><script>
+const socket=io();const c=document.querySelector("#c"),ctx=c.getContext("2d");let w,h,dpr,me=null,state={players:[],foods:[],leaderboard:[]},pointer={x:innerWidth/2,y:innerHeight/2};
+function size(){w=innerWidth;h=innerHeight;dpr=Math.min(devicePixelRatio||1,2);c.width=w*dpr;c.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}onresize=size;size();
+function join(){socket.emit("join",{name:document.querySelector("#name").value||"Visitante"});document.querySelector("#join").style.display="none"}
+document.querySelector("#go").onclick=join;
+c.addEventListener("pointermove",e=>{pointer={x:e.clientX,y:e.clientY};if(me)socket.emit("steer",{angle:Math.atan2(pointer.y-h/2,pointer.x-w/2)})});
+socket.on("joined",d=>{me=d.id});
+socket.on("state",s=>{state=s;me=s.self.id;document.querySelector("#me").textContent=s.self.name;document.querySelector("#len").textContent=Math.floor(s.self.length);document.querySelector("#r").innerHTML=s.leaderboard.map((p,i)=>`<div style="display:flex;justify-content:space-between;padding:4px 0">${i+1}. ${p.name}<b>${p.length}</b></div>`).join("")});
+socket.on("effect",e=>{const m=document.querySelector("#msg");m.textContent=`${e.label} +${e.growth}`;m.style.opacity=1;setTimeout(()=>m.style.opacity=0,1300)});
+function draw(){ctx.fillStyle="#07110c";ctx.fillRect(0,0,w,h);if(state.self){const ox=w/2-state.self.x,oy=h/2-state.self.y;
+ctx.strokeStyle="#ffffff0b";for(let x=Math.floor((state.self.x-w/2)/150)*150;x<state.self.x+w/2+150;x+=150){ctx.beginPath();ctx.moveTo(x+ox,0);ctx.lineTo(x+ox,h);ctx.stroke()}for(let y=Math.floor((state.self.y-h/2)/150)*150;y<state.self.y+h/2+150;y+=150){ctx.beginPath();ctx.moveTo(0,y+oy);ctx.lineTo(w,y+oy);ctx.stroke()}
+for(const f of state.foods||[]){ctx.fillStyle="#ffd45b";ctx.beginPath();ctx.arc(f.x+ox,f.y+oy,4,0,Math.PI*2);ctx.fill()}
+for(const p of state.players||[]){ctx.fillStyle=p.color;ctx.shadowBlur=p.id===me?16:6;ctx.shadowColor=p.color;ctx.beginPath();ctx.arc(p.x+ox,p.y+oy,p.id===me?11:8,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle="white";ctx.font="11px Arial";ctx.textAlign="center";ctx.fillText(p.name,p.x+ox,p.y+oy-15)}
+}
+requestAnimationFrame(draw)}draw();
+</script></body></html>
