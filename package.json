@@ -1,18 +1,14 @@
 {
-  "name": "worm-live-beta",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Starter multiplayer beta for WORM LIVE",
+  "name": "worm-live",
+  "version": "0.2.0",
+  "description": "WORM LIVE - Jogo Multiplayer Interativo 3D-Style para TikTok LIVE",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "start": "node src/server.js"
   },
   "dependencies": {
-    "express": "^4.21.2",
-    "socket.io": "^4.8.1"
-  },
-  "engines": {
-    "node": ">=20"
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5",
+    "dotenv": "^16.4.5"
   }
 }

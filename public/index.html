@@ -1,33 +1,661 @@
-<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>WORM LIVE BETA</title>
-<style>
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07110c;color:white;font:14px Arial}
-canvas{display:block;width:100vw;height:100vh}
-#join{position:fixed;inset:0;background:#07110cee;display:grid;place-items:center;z-index:5}
-.panel{width:min(90vw,360px);background:#13231a;border:1px solid #31553b;border-radius:18px;padding:22px;box-shadow:0 15px 60px #0008}
-h1{margin:0 0 8px;color:#8cff72}input,button{width:100%;padding:13px;border-radius:10px;border:0;margin-top:10px;font-size:16px}
-button{background:#60dc52;font-weight:bold;color:#10200d}
-#hud{position:fixed;top:12px;left:12px;pointer-events:none;background:#0009;padding:10px 13px;border-radius:12px}
-#rank{position:fixed;right:12px;top:12px;background:#0009;padding:10px;border-radius:12px;width:160px;font-size:12px}
-#msg{position:fixed;left:50%;top:18%;transform:translateX(-50%);background:#000b;padding:10px 15px;border-radius:20px;opacity:0;transition:.2s}
-</style></head><body>
-<canvas id="c"></canvas>
-<div id="join"><div class="panel"><h1>🐍 WORM LIVE</h1><div>Entre na arena compartilhada. Sua câmera acompanha sua cobra.</div><input id="name" maxlength="22" placeholder="Seu nome ou @TikTok"><button id="go">ENTRAR NO JOGO</button><small style="display:block;margin-top:12px;color:#b8c9bb">Beta externa — ainda não conectada aos eventos reais do TikTok.</small></div></div>
-<div id="hud">🐍 <b id="me">@Visitante</b><br>Comprimento: <b id="len">20</b></div><div id="rank">🏆 TOP 10<div id="r"></div></div><div id="msg"></div>
-<script src="/socket.io/socket.io.js"></script><script>
-const socket=io();const c=document.querySelector("#c"),ctx=c.getContext("2d");let w,h,dpr,me=null,state={players:[],foods:[],leaderboard:[]},pointer={x:innerWidth/2,y:innerHeight/2};
-function size(){w=innerWidth;h=innerHeight;dpr=Math.min(devicePixelRatio||1,2);c.width=w*dpr;c.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}onresize=size;size();
-function join(){socket.emit("join",{name:document.querySelector("#name").value||"Visitante"});document.querySelector("#join").style.display="none"}
-document.querySelector("#go").onclick=join;
-c.addEventListener("pointermove",e=>{pointer={x:e.clientX,y:e.clientY};if(me)socket.emit("steer",{angle:Math.atan2(pointer.y-h/2,pointer.x-w/2)})});
-socket.on("joined",d=>{me=d.id});
-socket.on("state",s=>{state=s;me=s.self.id;document.querySelector("#me").textContent=s.self.name;document.querySelector("#len").textContent=Math.floor(s.self.length);document.querySelector("#r").innerHTML=s.leaderboard.map((p,i)=>`<div style="display:flex;justify-content:space-between;padding:4px 0">${i+1}. ${p.name}<b>${p.length}</b></div>`).join("")});
-socket.on("effect",e=>{const m=document.querySelector("#msg");m.textContent=`${e.label} +${e.growth}`;m.style.opacity=1;setTimeout(()=>m.style.opacity=0,1300)});
-function draw(){ctx.fillStyle="#07110c";ctx.fillRect(0,0,w,h);if(state.self){const ox=w/2-state.self.x,oy=h/2-state.self.y;
-ctx.strokeStyle="#ffffff0b";for(let x=Math.floor((state.self.x-w/2)/150)*150;x<state.self.x+w/2+150;x+=150){ctx.beginPath();ctx.moveTo(x+ox,0);ctx.lineTo(x+ox,h);ctx.stroke()}for(let y=Math.floor((state.self.y-h/2)/150)*150;y<state.self.y+h/2+150;y+=150){ctx.beginPath();ctx.moveTo(0,y+oy);ctx.lineTo(w,y+oy);ctx.stroke()}
-for(const f of state.foods||[]){ctx.fillStyle="#ffd45b";ctx.beginPath();ctx.arc(f.x+ox,f.y+oy,4,0,Math.PI*2);ctx.fill()}
-for(const p of state.players||[]){ctx.fillStyle=p.color;ctx.shadowBlur=p.id===me?16:6;ctx.shadowColor=p.color;ctx.beginPath();ctx.arc(p.x+ox,p.y+oy,p.id===me?11:8,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle="white";ctx.font="11px Arial";ctx.textAlign="center";ctx.fillText(p.name,p.x+ox,p.y+oy-15)}
-}
-requestAnimationFrame(draw)}draw();
-</script></body></html>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>WORM LIVE 3D — @jairodrum</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+    body {
+      background: #070b14;
+      color: #fff;
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    /* Overlay Lobby & Death */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at center, rgba(15, 23, 42, 0.85), rgba(3, 7, 18, 0.96));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      backdrop-filter: blur(6px);
+    }
+    .card {
+      background: linear-gradient(145deg, #111827, #090d16);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 25px rgba(16, 185, 129, 0.2);
+      border-radius: 20px;
+      padding: 28px 24px;
+      width: 92%;
+      max-width: 400px;
+      text-align: center;
+    }
+    .logo {
+      font-size: 2rem;
+      font-weight: 900;
+      letter-spacing: 1px;
+      background: linear-gradient(90deg, #34d399, #38bdf8, #f472b6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-bottom: 18px;
+    }
+    .badge-live {
+      display: inline-block;
+      background: #ef4444;
+      color: #fff;
+      font-size: 0.72rem;
+      font-weight: 800;
+      padding: 3px 10px;
+      border-radius: 999px;
+      margin-bottom: 14px;
+      letter-spacing: 0.8px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 13px 16px;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #fff;
+      font-size: 1rem;
+      outline: none;
+      margin-bottom: 14px;
+      text-align: center;
+    }
+    input[type="text"]:focus {
+      border-color: #34d399;
+      box-shadow: 0 0 12px rgba(52, 211, 153, 0.3);
+    }
+    .skin-picker {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+    .skin-dot {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .skin-dot.selected {
+      transform: scale(1.22);
+      border-color: #fff;
+      box-shadow: 0 0 12px #fff;
+    }
+    button.play-btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(90deg, #10b981, #059669);
+      color: #fff;
+      font-size: 1.05rem;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(16, 185, 129, 0.35);
+      transition: transform 0.1s;
+    }
+    button.play-btn:active { transform: scale(0.97); }
+    #death-info {
+      display: none;
+      background: rgba(239, 68, 68, 0.14);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      padding: 10px;
+      border-radius: 10px;
+      margin-bottom: 14px;
+      font-size: 0.9rem;
+      color: #fca5a5;
+    }
+
+    /* HUD */
+    #hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .stats-box {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      backdrop-filter: blur(4px);
+    }
+    .stats-box div { margin-bottom: 3px; }
+    .stats-box span { font-weight: 800; color: #34d399; }
+
+    .leaderboard {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 10px 14px;
+      border-radius: 12px;
+      width: 185px;
+      font-size: 0.78rem;
+      backdrop-filter: blur(4px);
+    }
+    .leaderboard h3 {
+      font-size: 0.82rem;
+      color: #fbbf24;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+    .lb-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 3px;
+      color: #e2e8f0;
+    }
+    .lb-row.me { color: #34d399; font-weight: 800; }
+
+    #live-feed {
+      position: absolute;
+      top: 95px;
+      left: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 280px;
+    }
+    .live-toast {
+      background: linear-gradient(90deg, rgba(236, 72, 153, 0.88), rgba(139, 92, 246, 0.88));
+      padding: 7px 12px;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      animation: slideIn 0.25s ease;
+    }
+    @keyframes slideIn {
+      from { transform: translateX(-20px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* Mobile Boost & Sound Controls */
+    #boost-btn {
+      position: absolute;
+      bottom: 26px;
+      right: 26px;
+      width: 74px;
+      height: 74px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #f59e0b, #d97706);
+      border: 3px solid rgba(255,255,255,0.6);
+      color: #fff;
+      font-weight: 900;
+      font-size: 0.8rem;
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
+    }
+    #boost-btn:active { transform: scale(0.92); }
+
+    #sound-btn {
+      position: absolute;
+      bottom: 26px;
+      left: 18px;
+      pointer-events: auto;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="hud">
+    <div class="stats-box">
+      <div>Pontos: <span id="hud-score">0</span></div>
+      <div>Tamanho: <span id="hud-length">18</span></div>
+    </div>
+    <div id="live-feed"></div>
+    <div class="leaderboard">
+      <h3>🏆 Ranking LIVE</h3>
+      <div id="lb-list"></div>
+    </div>
+    <button id="sound-btn">🔊 Som: ON</button>
+    <button id="boost-btn">⚡ TURBO</button>
+  </div>
+
+  <div id="overlay">
+    <div class="card">
+      <div class="badge-live">TIKTOK LIVE @jairodrum</div>
+      <div class="logo">WORM LIVE 3D</div>
+      <div class="subtitle">Use seu @ do TikTok para ganhar bônus na LIVE!</div>
+      <div id="death-info"></div>
+      <input type="text" id="player-name" placeholder="Digite seu @nome..." maxlength="20" />
+      <div class="skin-picker" id="skin-picker"></div>
+      <button class="play-btn" id="start-btn">JOGAR AGORA</button>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+    window.addEventListener('resize', () => {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    });
+
+    // Web Audio API Sound Synthesizer (No external MP3 required)
+    let soundEnabled = true;
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function playSound(type) {
+      if (!soundEnabled) return;
+      initAudio();
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (type === 'eat') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(420, now);
+        osc.frequency.exponentialRampToValueAtTime(780, now + 0.09);
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+        osc.start(now);
+        osc.stop(now + 0.09);
+      } else if (type === 'live') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(523.25, now);
+        osc.frequency.setValueAtTime(659.25, now + 0.08);
+        osc.frequency.setValueAtTime(783.99, now + 0.16);
+        gain.gain.setValueAtTime(0.16, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } else if (type === 'die') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.exponentialRampToValueAtTime(55, now + 0.45);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+        osc.start(now);
+        osc.stop(now + 0.45);
+      }
+    }
+
+    document.getElementById('sound-btn').addEventListener('click', () => {
+      soundEnabled = !soundEnabled;
+      document.getElementById('sound-btn').textContent = soundEnabled ? '🔊 Som: ON' : '🔇 Som: OFF';
+    });
+
+    // Skin Picker Setup
+    const DEFAULT_SKINS = [
+      { primary: '#10b981', secondary: '#047857', glow: '#34d399' },
+      { primary: '#ef4444', secondary: '#991b1b', glow: '#f87171' },
+      { primary: '#f59e0b', secondary: '#b45309', glow: '#fbbf24' },
+      { primary: '#3b82f6', secondary: '#1d4ed8', glow: '#60a5fa' },
+      { primary: '#a855f7', secondary: '#6b21a8', glow: '#c084fc' },
+      { primary: '#06b6d4', secondary: '#0e7490', glow: '#22d3ee' },
+      { primary: '#ec4899', secondary: '#9d174d', glow: '#f472b6' }
+    ];
+    let selectedSkin = 0;
+    const skinPicker = document.getElementById('skin-picker');
+    DEFAULT_SKINS.forEach((s, idx) => {
+      const dot = document.createElement('div');
+      dot.className = 'skin-dot' + (idx === 0 ? ' selected' : '');
+      dot.style.background = `radial-gradient(circle at 30% 30%, ${s.glow}, ${s.primary}, ${s.secondary})`;
+      dot.onclick = () => {
+        document.querySelectorAll('.skin-dot').forEach(d => d.classList.remove('selected'));
+        dot.classList.add('selected');
+        selectedSkin = idx;
+      };
+      skinPicker.appendChild(dot);
+    });
+
+    // Game State
+    let myId = null;
+    let worldSize = 6000;
+    let camX = 3000;
+    let camY = 3000;
+    let gameState = { worms: [], foods: [], leaderboard: [], self: null };
+    let particles = [];
+    let currentAngle = 0;
+    let isBoosting = false;
+
+    const overlay = document.getElementById('overlay');
+    const nameInput = document.getElementById('player-name');
+    const deathInfo = document.getElementById('death-info');
+
+    document.getElementById('start-btn').addEventListener('click', () => {
+      initAudio();
+      const name = nameInput.value.trim() || 'Jogador';
+      socket.emit('join', { name, skinIndex: selectedSkin });
+      overlay.style.display = 'none';
+    });
+
+    // Controls: Mouse & Touch
+    function updatePointer(clientX, clientY) {
+      const dx = clientX - width / 2;
+      const dy = clientY - height / 2;
+      currentAngle = Math.atan2(dy, dx);
+      socket.emit('input', { angle: currentAngle, boosting: isBoosting });
+    }
+
+    window.addEventListener('mousemove', (e) => updatePointer(e.clientX, e.clientY));
+    window.addEventListener('mousedown', () => {
+      isBoosting = true;
+      socket.emit('input', { angle: currentAngle, boosting: true });
+    });
+    window.addEventListener('mouseup', () => {
+      isBoosting = false;
+      socket.emit('input', { angle: currentAngle, boosting: false });
+    });
+
+    window.addEventListener('touchmove', (e) => {
+      if (e.touches.length > 0) {
+        updatePointer(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: true });
+
+    const boostBtn = document.getElementById('boost-btn');
+    boostBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      isBoosting = true;
+      socket.emit('input', { angle: currentAngle, boosting: true });
+    });
+    boostBtn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      isBoosting = false;
+      socket.emit('input', { angle: currentAngle, boosting: false });
+    });
+
+    // Socket Events
+    socket.on('joined', (data) => {
+      myId = data.id;
+      worldSize = data.worldSize;
+    });
+
+    socket.on('state', (state) => {
+      gameState = state;
+      if (state.self) {
+        document.getElementById('hud-score').textContent = state.self.score;
+        document.getElementById('hud-length').textContent = state.self.length;
+      }
+      renderLeaderboard(state.leaderboard);
+    });
+
+    socket.on('ate', ({ x, y, value, color, emoji }) => {
+      playSound('eat');
+      for (let i = 0; i < 6; i++) {
+        particles.push({
+          x, y,
+          vx: (Math.random() - 0.5) * 5,
+          vy: (Math.random() - 0.5) * 5,
+          alpha: 1,
+          color: color || '#34d399',
+          text: i === 0 ? `+${value}` : null
+        });
+      }
+    });
+
+    socket.on('live_banner', ({ message }) => {
+      playSound('live');
+      const feed = document.getElementById('live-feed');
+      const toast = document.createElement('div');
+      toast.className = 'live-toast';
+      toast.textContent = message;
+      feed.appendChild(toast);
+      setTimeout(() => toast.remove(), 4500);
+    });
+
+    socket.on('died', ({ score, reason }) => {
+      playSound('die');
+      deathInfo.style.display = 'block';
+      deathInfo.innerHTML = `<strong>Fim de jogo!</strong> ${reason}<br/>Pontuação final: <strong>${score}</strong>`;
+      document.getElementById('start-btn').textContent = 'JOGAR NOVAMENTE';
+      overlay.style.display = 'flex';
+    });
+
+    function renderLeaderboard(list) {
+      const el = document.getElementById('lb-list');
+      el.innerHTML = list.map((item, idx) => `
+        <div class="lb-row ${item.id === myId ? 'me' : ''}">
+          <span>#${idx + 1} ${item.name}</span>
+          <span>${item.score}</span>
+        </div>
+      `).join('');
+    }
+
+    // 3D-Style Sphere Segment Renderer
+    function draw3DSphere(x, y, radius, primary, secondary, highlight, isBoosting) {
+      ctx.save();
+      // Drop shadow for 3D depth
+      ctx.beginPath();
+      ctx.arc(x + 4, y + 6, radius, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.fill();
+
+      // Main 3D Radial Gradient
+      const grad = ctx.createRadialGradient(
+        x - radius * 0.32,
+        y - radius * 0.32,
+        radius * 0.1,
+        x,
+        y,
+        radius
+      );
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.22, highlight);
+      grad.addColorStop(0.68, primary);
+      grad.addColorStop(1, secondary);
+
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      if (isBoosting) {
+        ctx.shadowColor = highlight;
+        ctx.shadowBlur = 16;
+      }
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawWorm(worm, time) {
+      const segs = worm.segments;
+      if (!segs || segs.length === 0) return;
+
+      const baseRadius = Math.min(14 + Math.sqrt(worm.targetLength) * 0.85, 32);
+
+      // Draw from tail to head so head overlaps naturally in 3D
+      for (let i = segs.length - 1; i >= 0; i--) {
+        const seg = segs[i];
+        const taper = i > segs.length - 8 ? (segs.length - i) / 8 : 1;
+        const r = Math.max(6, baseRadius * (0.75 + 0.25 * taper));
+        const pulse = worm.boosting ? Math.sin(time * 0.02 + i * 0.5) * 1.5 : 0;
+
+        // Alternate subtle stripe shading for realistic worm rings
+        const isStripe = i % 3 === 0;
+        draw3DSphere(
+          seg.x,
+          seg.y,
+          r + pulse,
+          isStripe ? worm.skin.secondary : worm.skin.primary,
+          '#050811',
+          worm.skin.glow,
+          worm.boosting
+        );
+      }
+
+      // Draw expressive 3D Eyes on Head
+      const head = segs[0];
+      const eyeOffsetDist = baseRadius * 0.48;
+      const eyeSpread = 0.55;
+      const eyeRadius = baseRadius * 0.32;
+
+      [-1, 1].forEach((side) => {
+        const ex = head.x + Math.cos(worm.angle + side * eyeSpread) * eyeOffsetDist;
+        const ey = head.y + Math.sin(worm.angle + side * eyeSpread) * eyeOffsetDist;
+
+        // Eye white
+        ctx.beginPath();
+        ctx.arc(ex, ey, eyeRadius, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
+        // Pupil looking forward
+        const px = ex + Math.cos(worm.angle) * (eyeRadius * 0.35);
+        const py = ey + Math.sin(worm.angle) * (eyeRadius * 0.35);
+        ctx.beginPath();
+        ctx.arc(px, py, eyeRadius * 0.52, 0, Math.PI * 2);
+        ctx.fillStyle = '#0f172a';
+        ctx.fill();
+      });
+
+      // Player Name Tag
+      ctx.font = 'bold 13px Segoe UI, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillText(worm.name, head.x + 1, head.y - baseRadius - 11);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(worm.name, head.x, head.y - baseRadius - 12);
+    }
+
+    function render(time) {
+      requestAnimationFrame(render);
+
+      // Smooth Camera Lerp
+      if (gameState.self && gameState.self.alive) {
+        camX += (gameState.self.x - camX) * 0.14;
+        camY += (gameState.self.y - camY) * 0.14;
+      }
+
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.save();
+      ctx.translate(width / 2 - camX, height / 2 - camY);
+
+      // 3D Perspective Grid Floor
+      const gridSize = 90;
+      const startX = Math.floor((camX - width / 2) / gridSize) * gridSize;
+      const endX = camX + width / 2 + gridSize;
+      const startY = Math.floor((camY - height / 2) / gridSize) * gridSize;
+      const endY = camY + height / 2 + gridSize;
+
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+      ctx.lineWidth = 1.5;
+      for (let x = Math.max(0, startX); x <= Math.min(worldSize, endX); x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, Math.max(0, startY));
+        ctx.lineTo(x, Math.min(worldSize, endY));
+        ctx.stroke();
+      }
+      for (let y = Math.max(0, startY); y <= Math.min(worldSize, endY); y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(Math.max(0, startX), y);
+        ctx.lineTo(Math.min(worldSize, endX), y);
+        ctx.stroke();
+      }
+
+      // Arena Neon Border
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 10;
+      ctx.shadowColor = '#ef4444';
+      ctx.shadowBlur = 20;
+      ctx.strokeRect(0, 0, worldSize, worldSize);
+      ctx.shadowBlur = 0;
+
+      // Render Real Foods with 3D Glow & Float
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const food of gameState.foods) {
+        const floatY = Math.sin(time * 0.005 + food.phase) * 3;
+        ctx.save();
+        ctx.shadowColor = food.color;
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(food.x, food.y + floatY, food.radius * 0.7, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fill();
+
+        ctx.font = `${food.radius * 1.45}px Segoe UI Emoji, Apple Color Emoji, sans-serif`;
+        ctx.fillText(food.emoji, food.x, food.y + floatY);
+        ctx.restore();
+      }
+
+      // Render Worms
+      for (const worm of gameState.worms) {
+        drawWorm(worm, time);
+      }
+
+      // Render Eating Particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.alpha -= 0.025;
+        if (p.alpha <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        if (p.text) {
+          ctx.font = 'bold 15px Segoe UI, sans-serif';
+          ctx.fillStyle = '#fbbf24';
+          ctx.fillText(p.text, p.x, p.y - 10);
+        } else {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
