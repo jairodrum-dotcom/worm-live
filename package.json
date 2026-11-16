@@ -1,7 +1,7 @@
 {
   "name": "worm-live",
-  "version": "0.2.0",
-  "description": "WORM LIVE - Jogo Multiplayer Interativo 3D-Style para TikTok LIVE",
+  "version": "1.1.0",
+  "description": "WORM LIVE 1.1 Ultra-Scale (Suporte para ate 3000 jogadores simultaneos)",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js"
